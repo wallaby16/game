@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bé Tập Ghép Quốc Kỳ</title>
+    <style>
+        :root {
+            --bg-color: #e0f2fe;
+            --primary-color: #0284c7;
+            --success-color: #22c55e;
+            --error-color: #ef4444;
+            --card-bg: #ffffff;
+            --text-main: #0c4a6e;
+        }
+
+        body {
+            font-family: 'Lexend', 'Segoe UI', Tahoma, sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(#bae6fd 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        /* Tablet Frame Simulation */
+        .tablet-frame {
+            background: #1e293b;
+            padding: 12px;
+            border-radius: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 900px;
+            aspect-ratio: 4/3;
+            display: flex;
+            position: relative;
+            border: 4px solid #334155;
+        }
+
+        .screen {
+            background: white;
+            width: 100%;
+            height: 100%;
+            border-radius: 28px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* Menu Screen */
+        #menu-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 20px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .title-group h1 {
+            font-size: clamp(1.5rem, 5vw, 2.5rem);
+            margin: 0;
+            color: var(--primary-color);
+        }
+
+        .level-options {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .level-card {
+            background: white;
+            border: 3px solid #e2e8f0;
+            padding: 20px;
+            border-radius: 20px;
+            width: 180px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .level-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary-color);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        }
+
+        /* Game Screen Header */
+        .header-stats {
+            background: #f8fafc;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 2px solid #e2e8f0;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .game-body {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .question-title {
+            font-size: 1.4rem;
+            margin: 0;
+        }
+
+        .content-layout {
+            display: flex;
+            width: 100%;
+            max-width: 800px;
+            gap: 30px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Flag Box */
+        .flag-container {
+            flex: 1;
+            max-width: 320px;
+            background: #f1f5f9;
+            padding: 15px;
+            border-radius: 20px;
+            border: 2px dashed #cbd5e1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .flag-img {
+            width: 100%;
+            aspect-ratio: 3/2;
+            object-fit: cover;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background: white;
+        }
+
+        /* Options Grid */
+        .options-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            width: 100%;
+        }
+
+        .opt-btn {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            padding: 18px;
+            border-radius: 15px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-main);
+            text-transform: uppercase;
+        }
+
+        .opt-btn:hover { background: #f0f9ff; border-color: var(--primary-color); }
+        .correct { background: var(--success-color) !important; color: white; border-color: var(--success-color); transform: scale(1.05); }
+        .wrong { background: var(--error-color) !important; color: white; border-color: var(--error-color); }
+
+        /* Fact Overlay */
+        #fact-overlay {
+            display: none;
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: white;
+            border-top: 4px solid var(--success-color);
+            padding: 20px;
+            z-index: 50;
+            box-shadow: 0 -10px 20px rgba(0,0,0,0.1);
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+        .fact-inner {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .fact-img {
+            width: 120px;
+            height: 90px;
+            object-fit: cover;
+            border-radius: 10px;
+        }
+
+        .next-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-left: auto;
+        }
+
+        .timer-red { color: var(--error-color); animation: pulse 1s infinite; }
+        @keyframes pulse { 50% { opacity: 0.5; } }
+
+        @media (max-width: 600px) {
+            .tablet-frame { aspect-ratio: auto; min-height: 90vh; border-radius: 20px; padding: 8px; }
+            .content-layout { flex-direction: column; }
+            .options-grid { grid-template-columns: 1fr; }
+            .fact-inner { flex-direction: column; text-align: center; }
+            .fact-img { width: 100%; height: 120px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="tablet-frame">
+        <div class="screen">
+            <!-- Màn hình Menu -->
+            <div id="menu-screen">
+                <div class="title-group">
+                    <h1>🌏 Bé Tập Ghép Quốc Kỳ</h1>
+                    <p>Hãy chọn độ khó để bắt đầu nhé!</p>
+                </div>
+                <div class="level-options">
+                    <div class="level-card" onclick="startGame('easy')">
+                        <h2 style="color:var(--success-color)">DỄ</h2>
+                        <p>Các nước quen thuộc nhất</p>
+                    </div>
+                    <div class="level-card" onclick="startGame('medium')">
+                        <h2 style="color:#f59e0b">VỪA</h2>
+                        <p>Cần suy nghĩ một chút</p>
+                    </div>
+                    <div class="level-card" onclick="startGame('hard')">
+                        <h2 style="color:var(--error-color)">KHÓ</h2>
+                        <p>Dành cho chuyên gia!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Màn hình Game -->
+            <div id="game-screen" style="display:none; height: 100%; display: flex; flex-direction: column;">
+                <div class="header-stats">
+                    <span>🏆 Điểm: <span id="score">0</span></span>
+                    <span id="timer-box">⏰: <span id="time">30</span>s</span>
+                    <span>📍 Câu: <span id="round">1</span>/10</span>
+                </div>
+
+                <div class="game-body">
+                    <h2 class="question-title">Đây là quốc kỳ của nước nào?</h2>
+                    
+                    <div class="content-layout">
+                        <div class="flag-container">
+                            <img id="flag-display" class="flag-img" src="" alt="Flag">
+                            <p style="margin-top:10px; font-weight:bold; color:var(--primary-color)">QUỐC KỲ</p>
+                        </div>
+
+                        <div id="options" class="options-grid">
+                            <!-- Nút đáp án sẽ ở đây -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Thông tin thú vị -->
+                <div id="fact-overlay">
+                    <div class="fact-inner">
+                        <img id="fact-image" class="fact-img" src="" alt="Info">
+                        <div>
+                            <strong style="color:var(--success-color)">💡 Bạn có biết?</strong>
+                            <p id="fact-text" style="margin: 5px 0 0 0; font-size: 0.95rem;"></p>
+                        </div>
+                        <button class="next-btn" onclick="nextRound()">Tiếp theo ➔</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const db = {
+            easy: [
+                { name: "Việt Nam", code: "vn", fact: "Việt Nam là nước xuất khẩu cà phê lớn thứ hai thế giới.", img: "https://images.unsplash.com/photo-1555944858-752c8a521210?w=400" },
+                { name: "Hoa Kỳ", code: "us", fact: "Quốc kỳ Mỹ có 50 ngôi sao đại diện cho 50 tiểu bang.", img: "https://images.unsplash.com/photo-1508433957232-3107f5ec3045?w=400" },
+                { name: "Nhật Bản", code: "jp", fact: "Nhật Bản là quốc gia của hoa anh đào và núi Phú Sĩ.", img: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400" },
+                { name: "Pháp", code: "fr", fact: "Tháp Eiffel tại Paris là biểu tượng nổi tiếng nhất của Pháp.", img: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400" },
+                { name: "Hàn Quốc", code: "kr", fact: "Hàn Quốc có nền văn hóa K-Pop phát triển rất mạnh mẽ.", img: "https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=400" },
+                { name: "Anh", code: "gb", fact: "Nước Anh nổi tiếng với đồng hồ Big Ben và xe buýt 2 tầng.", img: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=400" },
+                { name: "Trung Quốc", code: "cn", fact: "Gấu trúc là biểu tượng và kho báu quốc gia của Trung Quốc.", img: "https://images.unsplash.com/photo-1508804185872-d7badad00f7d?w=400" },
+                { name: "Thái Lan", code: "th", fact: "Thái Lan được biết đến như xứ sở của những nụ cười.", img: "https://images.unsplash.com/photo-1528181304800-2f143c8c798d?w=400" },
+                { name: "Úc", code: "au", fact: "Chuột túi (Kangaroo) chỉ sống tự nhiên ở nước Úc.", img: "https://images.unsplash.com/photo-1523482580672-f109ba8cb9be?w=400" },
+                { name: "Canada", code: "ca", fact: "Canada có nhiều hồ nước ngọt hơn bất kỳ nước nào.", img: "https://images.unsplash.com/photo-1517935703635-275d25e40638?w=400" }
+            ],
+            medium: [
+                { name: "Thụy Điển", code: "se", fact: "Thụy Điển là nơi ra đời của giải thưởng Nobel.", img: "https://images.unsplash.com/photo-1509339022327-1e1e25360a41?w=400" },
+                { name: "Hy Lạp", code: "gr", fact: "Hy Lạp là nơi khai sinh ra Thế vận hội Olympic.", img: "https://images.unsplash.com/photo-1503152394-c571994fd373?w=400" },
+                { name: "Thổ Nhĩ Kỳ", code: "tr", fact: "Thổ Nhĩ Kỳ nằm ở cả châu Á và châu Âu.", img: "https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=400" },
+                { name: "Nga", code: "ru", fact: "Nga là quốc gia có diện tích lớn nhất thế giới.", img: "https://images.unsplash.com/photo-1513326738677-b964603b136d?w=400" },
+                { name: "Ý", code: "it", fact: "Ý là quê hương của món Pizza và Mỳ Ý.", img: "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=400" },
+                { name: "Đức", code: "de", fact: "Đức là quê hương của các loại xe hơi nổi tiếng.", img: "https://images.unsplash.com/photo-1467043153537-a4fba2cd39ef?w=400" },
+                { name: "Tây Ban Nha", code: "es", fact: "Tây Ban Nha có vũ điệu Flamenco rất sôi động.", img: "https://images.unsplash.com/photo-1543783230-27835842650d?w=400" },
+                { name: "Hà Lan", code: "nl", fact: "Hà Lan nổi tiếng với hoa Tulip và cối xay gió.", img: "https://images.unsplash.com/photo-1518114055437-07e86638f25c?w=400" },
+                { name: "Brazil", code: "br", fact: "Brazil là quốc gia giành được nhiều cúp World Cup nhất.", img: "https://images.unsplash.com/photo-1483729558449-99ef09a8c325?w=400" },
+                { name: "Ai Cập", code: "eg", fact: "Ai Cập cổ đại nổi tiếng với các Kim tự tháp.", img: "https://images.unsplash.com/photo-1503177119275-0aa32b3a7447?w=400" }
+            ],
+            hard: [
+                { name: "Bhutan", code: "bt", fact: "Bhutan đo lường sự giàu có bằng chỉ số Hạnh phúc.", img: "https://images.unsplash.com/photo-1547333590-47fae5f58d21?w=400" },
+                { name: "Iceland", code: "is", fact: "Iceland không có muỗi và có rất nhiều núi lửa.", img: "https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=400" },
+                { name: "Nepal", code: "np", fact: "Nepal có đỉnh núi Everest cao nhất thế giới.", img: "https://images.unsplash.com/photo-1544735716-392fe2489ffa?w=400" },
+                { name: "Madagascar", code: "mg", fact: "Đảo này có loài vượn cáo Lemur rất đặc biệt.", img: "https://images.unsplash.com/photo-1521408892550-20ba8f381676?w=400" },
+                { name: "Mông Cổ", code: "mn", fact: "Mông Cổ có mật độ dân số thấp nhất thế giới.", img: "https://images.unsplash.com/photo-1527334134460-f21a05ef62f3?w=400" },
+                { name: "Maroc", code: "ma", fact: "Thành phố Marrakesh ở đây được gọi là Thành phố Đỏ.", img: "https://images.unsplash.com/photo-1489749798305-4fea3ae63d43?w=400" },
+                { name: "Senegal", code: "sn", fact: "Senegal có hồ Retba với nước màu hồng tự nhiên.", img: "https://images.unsplash.com/photo-1523841589119-b444fe093fa7?w=400" },
+                { name: "Kazakhstan", code: "kz", fact: "Là nước không giáp biển có diện tích lớn nhất thế giới.", img: "https://images.unsplash.com/photo-1536413214590-502a5c9f559b?w=400" },
+                { name: "Uzbekistan", code: "uz", fact: "Thành phố Samarkand từng là trung tâm Con đường Tơ lụa.", img: "https://images.unsplash.com/photo-1528644491124-2f7c04633a1e?w=400" },
+                { name: "Ethiopia", code: "et", fact: "Đây là nơi đầu tiên phát hiện ra cây cà phê.", img: "https://images.unsplash.com/photo-1523805009345-7448845a9e13?w=400" }
+            ]
+        };
+
+        let currentLevel = 'easy';
+        let questionStack = [];
+        let currentRound = 1;
+        let score = 0;
+        let timeLeft = 30;
+        let timer;
+        let targetCountry;
+
+        function startGame(level) {
+            currentLevel = level;
+            currentRound = 1;
+            score = 0;
+            
+            const pool = [...db[level]];
+            questionStack = pool.sort(() => Math.random() - 0.5).slice(0, 10);
+            
+            timeLeft = (level === 'easy' ? 60 : (level === 'medium' ? 40 : 25));
+            
+            document.getElementById('menu-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'flex';
+            
+            loadQuestion();
+            startTimer();
+        }
+
+        function startTimer() {
+            clearInterval(timer);
+            timer = setInterval(() => {
+                timeLeft--;
+                document.getElementById('time').innerText = timeLeft;
+                if(timeLeft <= 7) document.getElementById('timer-box').classList.add('timer-red');
+                else document.getElementById('timer-box').classList.remove('timer-red');
+                
+                if(timeLeft <= 0) endGame("Hết giờ rồi! Hãy cố gắng hơn nhé.");
+            }, 1000);
+        }
+
+        function loadQuestion() {
+            document.getElementById('round').innerText = currentRound;
+            document.getElementById('score').innerText = score;
+            
+            targetCountry = questionStack[currentRound - 1];
+            document.getElementById('flag-display').src = `https://flagcdn.com/w320/${targetCountry.code}.png`;
+            
+            let options = [targetCountry];
+            const allCountries = [...db.easy, ...db.medium, ...db.hard];
+            
+            while(options.length < 4) {
+                let r = allCountries[Math.floor(Math.random() * allCountries.length)];
+                if(!options.find(o => o.code === r.code)) options.push(r);
+            }
+            options.sort(() => Math.random() - 0.5);
+
+            const optContainer = document.getElementById('options');
+            optContainer.innerHTML = '';
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'opt-btn';
+                btn.innerText = opt.name;
+                btn.onclick = () => checkAnswer(opt, btn);
+                optContainer.appendChild(btn);
+            });
+        }
+
+        function checkAnswer(selected, btn) {
+            const btns = document.querySelectorAll('.opt-btn');
+            btns.forEach(b => b.disabled = true);
+
+            if(selected.code === targetCountry.code) {
+                btn.classList.add('correct');
+                score += 10 + Math.floor(timeLeft / 2);
+                showFact();
+            } else {
+                btn.classList.add('wrong');
+                timeLeft = Math.max(0, timeLeft - 8);
+                document.getElementById('time').innerText = timeLeft;
+                setTimeout(() => {
+                    btns.forEach(b => { b.disabled = false; b.classList.remove('wrong'); });
+                }, 1000);
+            }
+        }
+
+        function showFact() {
+            document.getElementById('fact-text').innerText = targetCountry.fact;
+            document.getElementById('fact-image').src = targetCountry.img;
+            document.getElementById('fact-overlay').style.display = 'block';
+        }
+
+        function nextRound() {
+            document.getElementById('fact-overlay').style.display = 'none';
+            currentRound++;
+            if(currentRound > 10) endGame("Tuyệt vời! Bạn đã hoàn thành thử thách.");
+            else loadQuestion();
+        }
+
+        function endGame(msg) {
+            clearInterval(timer);
+            const overlay = document.createElement('div');
+            overlay.style = "position:absolute; inset:0; background:rgba(255,255,255,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:20px;";
+            overlay.innerHTML = `
+                <h1 style="color:var(--primary-color)">KẾT THÚC</h1>
+                <p style="font-size:1.2rem">${msg}</p>
+                <h2 style="font-size:3rem; margin:10px 0;">${score} ĐIỂM</h2>
+                <button onclick="location.reload()" class="next-btn" style="padding:15px 40px; font-size:1.2rem">Chơi lại</button>
+            `;
+            document.querySelector('.screen').appendChild(overlay);
+        }
+    </script>
+</body>
+</html>
