@@ -1,0 +1,224 @@
+:root {
+            --bg-color: #e0f2fe;
+            --primary-color: #0284c7;
+            --success-color: #22c55e;
+            --error-color: #ef4444;
+            --card-bg: #ffffff;
+            --text-main: #0c4a6e;
+        }
+
+        body {
+            font-family: 'Lexend', 'Segoe UI', Tahoma, sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(#bae6fd 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        /* Tablet Frame Simulation */
+        .tablet-frame {
+            background: #1e293b;
+            padding: 12px;
+            border-radius: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 900px;
+            aspect-ratio: 4/3;
+            display: flex;
+            position: relative;
+            border: 4px solid #334155;
+        }
+
+        .screen {
+            background: white;
+            width: 100%;
+            height: 100%;
+            border-radius: 28px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* Menu Screen */
+        #menu-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 20px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .title-group h1 {
+            font-size: clamp(1.5rem, 5vw, 2.5rem);
+            margin: 0;
+            color: var(--primary-color);
+        }
+
+        .level-options {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .level-card {
+            background: white;
+            border: 3px solid #e2e8f0;
+            padding: 20px;
+            border-radius: 20px;
+            width: 180px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .level-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary-color);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        }
+
+        /* Game Screen Header */
+        .header-stats {
+            background: #f8fafc;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 2px solid #e2e8f0;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .game-body {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .question-title {
+            font-size: 1.4rem;
+            margin: 0;
+        }
+
+        .content-layout {
+            display: flex;
+            width: 100%;
+            max-width: 800px;
+            gap: 30px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Flag Box */
+        .flag-container {
+            flex: 1;
+            max-width: 320px;
+            background: #f1f5f9;
+            padding: 15px;
+            border-radius: 20px;
+            border: 2px dashed #cbd5e1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .flag-img {
+            width: 100%;
+            aspect-ratio: 3/2;
+            object-fit: cover;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background: white;
+        }
+
+        /* Options Grid */
+        .options-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            width: 100%;
+        }
+
+        .opt-btn {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            padding: 18px;
+            border-radius: 15px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-main);
+            text-transform: uppercase;
+        }
+
+        .opt-btn:hover { background: #f0f9ff; border-color: var(--primary-color); }
+        .correct { background: var(--success-color) !important; color: white; border-color: var(--success-color); transform: scale(1.05); }
+        .wrong { background: var(--error-color) !important; color: white; border-color: var(--error-color); }
+
+        /* Fact Overlay */
+        #fact-overlay {
+            display: none;
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: white;
+            border-top: 4px solid var(--success-color);
+            padding: 20px;
+            z-index: 50;
+            box-shadow: 0 -10px 20px rgba(0,0,0,0.1);
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+        .fact-inner {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .fact-img {
+            width: 120px;
+            height: 90px;
+            object-fit: cover;
+            border-radius: 10px;
+        }
+
+        .next-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-left: auto;
+        }
+
+        .timer-red { color: var(--error-color); animation: pulse 1s infinite; }
+        @keyframes pulse { 50% { opacity: 0.5; } }
+
+        @media (max-width: 600px) {
+            .tablet-frame { aspect-ratio: auto; min-height: 90vh; border-radius: 20px; padding: 8px; }
+            .content-layout { flex-direction: column; }
+            .options-grid { grid-template-columns: 1fr; }
+            .fact-inner { flex-direction: column; text-align: center; }
+            .fact-img { width: 100%; height: 120px; }
+        }
