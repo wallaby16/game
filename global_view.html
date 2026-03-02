@@ -1,0 +1,765 @@
+import React, { useState, useEffect, useRef } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  query, 
+  onSnapshot, 
+  addDoc, 
+  serverTimestamp, 
+  doc, 
+  setDoc,
+  limit
+} from 'firebase/firestore';
+import { 
+  ShieldAlert, 
+  X,
+  RefreshCcw,
+  MapPin,
+  ShieldCheck,
+  MessageSquare,
+  Send,
+  Image as ImageIcon,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Globe,
+  Zap,
+  Info,
+  ExternalLink,
+  Link2
+} from 'lucide-react';
+
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'global-conflict-tracker';
+
+const apiKey = ""; 
+const RSS_FEEDS = [
+  'https://www.bbc.com/news/world/rss.xml',
+  'https://www.aljazeera.com/xml/rss/all.xml',
+  'https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml',
+  'https://vnexpress.net/rss/the-gioi.rss',
+];
+const CORS_PROXY = "https://api.allorigins.win/raw?url=";
+const REFRESH_INTERVAL = 300000;
+
+// Helper to get color based on severity
+const getSeverityColor = (severity) => {
+  switch (severity?.toLowerCase()) {
+    case 'high': return '#ef4444'; // Red-500
+    case 'medium': return '#f97316'; // Orange-500
+    case 'low': return '#eab308'; // Yellow-500
+    default: return '#64748b'; // Slate-500
+  }
+};
+
+const ThreeGlobe = ({ zones, onSelect, showFlights }) => {
+  const mountRef = useRef(null);
+  const zonesRef = useRef(zones);
+
+  useEffect(() => {
+    zonesRef.current = zones;
+  }, [zones]);
+
+  useEffect(() => {
+    if (!mountRef.current) return;
+    const width = mountRef.current.clientWidth;
+    const height = mountRef.current.clientHeight;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+    camera.position.z = 240;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    mountRef.current.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.minDistance = 120;
+    controls.maxDistance = 400;
+
+    const textureLoader = new THREE.TextureLoader();
+    const earthMap = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg');
+    const earthGeo = new THREE.SphereGeometry(100, 64, 64);
+    const earthMat = new THREE.MeshPhongMaterial({ map: earthMap, shininess: 5 });
+    const earth = new THREE.Mesh(earthGeo, earthMat);
+    scene.add(earth);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    sunLight.position.set(5, 3, 5);
+    scene.add(sunLight);
+
+    const markersGroup = new THREE.Group();
+    scene.add(markersGroup);
+
+    const flightGroup = new THREE.Group();
+    scene.add(flightGroup);
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    const latLngToVector3 = (lat, lng, radius) => {
+      const phi = (90 - lat) * (Math.PI / 180);
+      const theta = (lng + 180) * (Math.PI / 180);
+      return new THREE.Vector3(
+        -(radius * Math.sin(phi) * Math.cos(theta)),
+        radius * Math.cos(phi),
+        radius * Math.sin(phi) * Math.sin(theta)
+      );
+    };
+
+    const createLabel = (text, color) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 384;
+      canvas.height = 96;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.beginPath();
+      ctx.roundRect(40, 20, 304, 56, 10);
+      ctx.fill();
+      ctx.font = 'Bold 28px "Inter", sans-serif';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.fillText(text.toUpperCase(), 192, 58);
+      const texture = new THREE.CanvasTexture(canvas);
+      const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+      const sprite = new THREE.Sprite(spriteMaterial);
+      sprite.scale.set(22, 5.5, 1);
+      return sprite;
+    };
+
+    const cleanupMarkers = () => {
+      while(markersGroup.children.length > 0){ 
+        markersGroup.remove(markersGroup.children[0]); 
+      }
+      while(flightGroup.children.length > 0){ 
+        flightGroup.remove(flightGroup.children[0]); 
+      }
+    };
+
+    cleanupMarkers();
+
+    zones.forEach(zone => {
+      const pos = latLngToVector3(zone.lat, zone.lng, 101);
+      const colorHex = getSeverityColor(zone.severity);
+      const color = new THREE.Color(colorHex);
+      
+      const pin = new THREE.Mesh(
+        new THREE.SphereGeometry(1.2, 16, 16),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 })
+      );
+      pin.position.copy(pos);
+      pin.userData = { zoneId: zone.id };
+      markersGroup.add(pin);
+
+      const ringGeo = new THREE.RingGeometry(1.5, 2.2, 32);
+      const ringMat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.4 });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.position.copy(pos);
+      ring.lookAt(new THREE.Vector3(0,0,0));
+      markersGroup.add(ring);
+
+      const labelText = zone.country_vn || zone.country;
+      const label = createLabel(labelText, colorHex);
+      const labelPos = latLngToVector3(zone.lat, zone.lng, 108);
+      label.position.copy(labelPos);
+      markersGroup.add(label);
+
+      if (zone.severity === 'high' || zone.type === 'war') {
+        const start = latLngToVector3(zone.lat + 20, zone.lng - 30, 105);
+        const end = pos;
+        
+        const curve = new THREE.QuadraticBezierCurve3(
+          start,
+          latLngToVector3((zone.lat + (zone.lat + 20)) / 2, (zone.lng + (zone.lng - 30)) / 2, 140),
+          end
+        );
+        
+        const points = curve.getPoints(50);
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineDashedMaterial({ 
+          color: 0xff4444, 
+          dashSize: 3, 
+          gapSize: 2,
+          transparent: true,
+          opacity: 0.6
+        });
+        const line = new THREE.Line(geometry, material);
+        line.computeLineDistances();
+        flightGroup.add(line);
+      }
+    });
+
+    const onMouseClick = (event) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(markersGroup.children);
+
+      if (intersects.length > 0) {
+        const clickedObj = intersects.find(i => i.object.userData.zoneId);
+        if (clickedObj) {
+          const zone = zonesRef.current.find(z => z.id === clickedObj.object.userData.zoneId);
+          if (zone) onSelect(zone);
+        }
+      }
+    };
+
+    renderer.domElement.addEventListener('click', onMouseClick);
+
+    const animate = () => {
+      requestAnimationFrame(animate);
+      earth.rotation.y += 0.0003;
+      markersGroup.rotation.y += 0.0003;
+      flightGroup.rotation.y += 0.0003;
+      flightGroup.visible = showFlights;
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    const handleResize = () => {
+      if (!mountRef.current) return;
+      camera.aspect = mountRef.current.clientWidth / mountRef.current.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      renderer.domElement.removeEventListener('click', onMouseClick);
+      if (mountRef.current) mountRef.current.removeChild(renderer.domElement);
+      renderer.dispose();
+    };
+  }, [zones, showFlights]);
+
+  return <div ref={mountRef} className="w-full h-full cursor-pointer" />;
+};
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [zones, setZones] = useState([]);
+  const [selectedZone, setSelectedZone] = useState(null);
+  const [zoneComments, setZoneComments] = useState([]);
+  const [globalChat, setGlobalChat] = useState([]);
+  const [newComment, setNewComment] = useState("");
+  const [newGlobalMsg, setNewGlobalMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("Vệ tinh đang khởi động...");
+  const [activeImgIdx, setActiveImgIdx] = useState(0);
+  const [showFlights, setShowFlights] = useState(true);
+
+  const chatEndRef = useRef(null);
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (e) {
+        console.error("Auth error:", e);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  // Zones Listener
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'zones'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const now = Date.now();
+      const twentyFourHours = 24 * 60 * 60 * 1000;
+      const data = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(z => z.timestamp && (now - z.timestamp.toMillis() < twentyFourHours));
+      
+      data.sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
+      setZones(data);
+    }, (err) => console.error("Firestore zones err:", err));
+    return () => unsubscribe();
+  }, [user]);
+
+  // Global Chat Listener
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'global_chat'), limit(50));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => doc.data());
+      data.sort((a, b) => a.timestamp?.toMillis() - b.timestamp?.toMillis());
+      setGlobalChat(data);
+      setTimeout(scrollToBottom, 100);
+    }, (err) => console.error("Global chat err:", err));
+    return () => unsubscribe();
+  }, [user]);
+
+  // Specific Zone Comments Listener
+  useEffect(() => {
+    if (!user || !selectedZone) {
+      setZoneComments([]);
+      setActiveImgIdx(0);
+      return;
+    }
+    
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', `comments_${selectedZone.id}`));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => doc.data());
+      data.sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
+      setZoneComments(data);
+    }, (err) => console.error("Firestore comments err:", err));
+
+    return () => unsubscribe();
+  }, [user, selectedZone]);
+
+  const loadRSSAndAnalyze = async () => {
+    if (loading) return;
+    setLoading(true);
+    setStatus("Quét dữ liệu ảnh thực...");
+    
+    let newsPackage = [];
+    for (const url of RSS_FEEDS) {
+      try {
+        const res = await fetch(CORS_PROXY + encodeURIComponent(`${url}?t=${Date.now()}`));
+        const xml = await res.text();
+        const doc = new DOMParser().parseFromString(xml, "text/xml");
+        const items = Array.from(doc.querySelectorAll("item")).slice(0, 15);
+        
+        items.forEach(item => {
+          const title = item.querySelector("title")?.textContent || "";
+          const link = item.querySelector("link")?.textContent || "";
+          const description = item.querySelector("description")?.textContent || "";
+          
+          let images = [];
+          
+          const mediaNodes = item.getElementsByTagName("media:content");
+          if (mediaNodes.length > 0) {
+            for (let i = 0; i < mediaNodes.length; i++) {
+              images.push(mediaNodes[i].getAttribute("url"));
+            }
+          }
+
+          const enclosure = item.querySelector("enclosure");
+          if (enclosure && enclosure.getAttribute("type")?.startsWith("image/")) {
+            images.push(enclosure.getAttribute("url"));
+          }
+
+          const imgRegex = /<img[^>]+src="([^">]+)"/g;
+          let match;
+          while ((match = imgRegex.exec(description)) !== null) {
+            images.push(match[1]);
+          }
+
+          newsPackage.push({ title, images: images.filter(Boolean), link });
+        });
+      } catch (e) { console.warn("RSS error", url); }
+    }
+
+    if (newsPackage.length === 0) { setLoading(false); return; }
+
+    setStatus("AI đang xác định vị trí...");
+    try {
+      const newsTexts = newsPackage.map(n => n.title).join(" | ");
+      const prompt = `Identify major conflicts/outbreaks from: [${newsTexts}]. Return valid JSON: { "zones": [{ "country_vn": "VN Name", "country": "EN Name", "lat": float, "lng": float, "type": "war"|"disease", "severity": "low"|"medium"|"high", "detail": "summary", "advisory": "advice", "emergency_contact": "phone", "flight_status": { "cancelled": int, "delayed": int }, "news_ref": "title of relevant news" }] }`;
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+      
+      const result = await res.json();
+      const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) throw new Error("No AI response");
+
+      let parsed = JSON.parse(rawText.replace(/```json|```/g, "").trim());
+      if (parsed.zones) {
+        for (const zone of parsed.zones) {
+          const relevantNews = newsPackage.find(n => n.title === zone.news_ref);
+          const images = relevantNews?.images || [];
+          const sourceLink = relevantNews?.link || "";
+
+          const zoneId = (zone.country_vn || zone.country).toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, '');
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'zones', zoneId), {
+            ...zone,
+            images,
+            sourceLink,
+            timestamp: serverTimestamp(),
+          });
+        }
+      }
+      setStatus("Vệ tinh trực tuyến");
+    } catch (e) {
+      setStatus("Lỗi phân tích hệ thống");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      loadRSSAndAnalyze();
+      const interval = setInterval(loadRSSAndAnalyze, REFRESH_INTERVAL);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  const postZoneComment = async (e) => {
+    e.preventDefault();
+    if (!newComment.trim() || !selectedZone || !user) return;
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', `comments_${selectedZone.id}`), {
+        text: newComment,
+        userName: `Field_${user.uid.slice(0, 4)}`,
+        timestamp: serverTimestamp()
+      });
+      setNewComment("");
+    } catch (e) {}
+  };
+
+  const postGlobalMsg = async (e) => {
+    e.preventDefault();
+    if (!newGlobalMsg.trim() || !user) return;
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'global_chat'), {
+        text: newGlobalMsg,
+        userName: `Intel_${user.uid.slice(0, 4)}`,
+        timestamp: serverTimestamp()
+      });
+      setNewGlobalMsg("");
+    } catch (e) {}
+  };
+
+  const nextImg = () => {
+    if (selectedZone?.images?.length) {
+      setActiveImgIdx((prev) => (prev + 1) % selectedZone.images.length);
+    }
+  };
+
+  const prevImg = () => {
+    if (selectedZone?.images?.length) {
+      setActiveImgIdx((prev) => (prev - 1 + selectedZone.images.length) % selectedZone.images.length);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-[#020202] text-slate-400 font-sans overflow-hidden">
+      <header className="h-12 flex items-center justify-between px-6 bg-black border-b border-white/5 z-50">
+        <div className="flex items-center gap-4">
+          <ShieldAlert className="text-red-500" size={18} />
+          <div>
+            <h1 className="text-[9px] font-black tracking-[0.3em] text-white uppercase italic">MONITOR <span className="text-red-600">RSS-LIVE</span></h1>
+            <div className="flex items-center gap-1.5">
+               <span className="w-1 h-1 rounded-full bg-green-500 animate-pulse"></span>
+               <p className="text-[7px] font-bold text-slate-600 uppercase tracking-tighter italic">{status}</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowFlights(!showFlights)} 
+            className={`px-2 py-1 border rounded uppercase flex items-center gap-2 text-[8px] font-bold transition-all ${showFlights ? 'bg-red-950/30 border-red-500 text-red-500' : 'bg-white/5 border-white/10 text-slate-500'}`}
+          >
+            {showFlights ? <Eye size={10} /> : <EyeOff size={10} />} HK: {showFlights ? 'ON' : 'OFF'}
+          </button>
+          <button onClick={loadRSSAndAnalyze} className="px-2 py-1 bg-white/5 border border-white/10 rounded uppercase flex items-center gap-2 hover:bg-white/10 text-slate-300 text-[8px] font-bold transition-all">
+             <RefreshCcw size={10} className={loading ? "animate-spin" : ""} /> Quét lại
+          </button>
+        </div>
+      </header>
+
+      {/* Main Grid Layout: 3 Columns */}
+      <main className="flex-1 flex p-2 gap-2 overflow-hidden bg-[#050505]">
+        
+        {/* Column 1: Zones List Updated with Images and Sources */}
+        <aside className="w-80 flex flex-col gap-2 shrink-0">
+          <div className="flex-1 bg-white/[0.02] border border-white/5 rounded-2xl flex flex-col overflow-hidden backdrop-blur-xl">
+            <div className="p-3 bg-white/[0.03] border-b border-white/5 flex items-center justify-between">
+              <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest italic">Mục tiêu theo dõi</span>
+              <div className="flex items-center gap-1">
+                <span className="w-1 h-1 bg-red-500 rounded-full animate-pulse"></span>
+                <span className="text-[7px] font-bold text-red-600 uppercase tracking-tighter">Live</span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+              {zones.map((z) => {
+                const sColor = getSeverityColor(z.severity);
+                const isSelected = selectedZone?.id === z.id;
+                
+                return (
+                  <button 
+                    key={z.id} 
+                    onClick={() => setSelectedZone(z)} 
+                    style={{ borderColor: isSelected ? `${sColor}80` : undefined }}
+                    className={`group w-full text-left p-2 rounded-xl border transition-all duration-300 flex gap-3 ${isSelected ? 'bg-white/[0.05] text-white translate-x-1 shadow-lg' : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.05]'}`}
+                  >
+                    {/* Avatar Image Thumbnail */}
+                    <div className="w-14 h-14 rounded-lg bg-slate-800 shrink-0 overflow-hidden border border-white/10 relative">
+                      {z.images && z.images.length > 0 ? (
+                        <img src={z.images[0]} alt="" className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center opacity-20"><ImageIcon size={16} /></div>
+                      )}
+                      <div className="absolute bottom-0 left-0 w-full h-1" style={{ backgroundColor: sColor }}></div>
+                    </div>
+
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <div className="flex justify-between items-start">
+                        <h3 className="text-[10px] font-black uppercase italic tracking-tight truncate pr-2">{z.country_vn}</h3>
+                        <span className="text-[6px] text-slate-600 font-mono shrink-0">
+                          {z.timestamp ? new Date(z.timestamp.toMillis()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="w-1 h-1 rounded-full" style={{ backgroundColor: sColor }}></span>
+                        <span className="text-[7px] font-bold text-slate-500 uppercase truncate">{z.news_ref || 'Intelligence Update'}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1 mt-1 opacity-40 group-hover:opacity-100 transition-opacity">
+                        <Link2 size={8} className="text-blue-500" />
+                        <span className="text-[6px] font-bold text-slate-600 uppercase truncate max-w-[100px]">
+                          {z.sourceLink ? new URL(z.sourceLink).hostname : 'Unknown Source'}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              {zones.length === 0 && !loading && (
+                <div className="p-8 text-center">
+                  <p className="text-[8px] uppercase font-black text-slate-700 italic tracking-widest">Đang chờ tín hiệu...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        {/* Column 2: Globe Map */}
+        <section className="flex-1 bg-black border border-white/5 rounded-3xl overflow-hidden relative shadow-inner">
+          <ThreeGlobe zones={zones} onSelect={setSelectedZone} showFlights={showFlights} />
+          
+          <div className="absolute top-4 left-4 pointer-events-none">
+            <div className="bg-black/40 border border-white/5 px-4 py-2 rounded-2xl backdrop-blur-md">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest italic flex items-center gap-3">
+                <MapPin size={12} className="text-red-500" /> Hệ thống giám sát vệ tinh thời gian thực
+              </p>
+            </div>
+          </div>
+
+          {!selectedZone && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-none text-center">
+               <div className="bg-white/[0.02] border border-white/5 px-6 py-2 rounded-full backdrop-blur-sm">
+                  <p className="text-[8px] font-bold text-slate-600 uppercase tracking-[0.3em] italic">Xoay để quan sát địa cầu • Nhấp vào điểm để xem chi tiết</p>
+               </div>
+            </div>
+          )}
+        </section>
+
+        {/* Column 3: Interactive Panel */}
+        <aside className="w-96 flex flex-col gap-2 shrink-0 overflow-hidden">
+          {selectedZone ? (
+            <div 
+              className="flex-1 bg-black/80 border border-white/5 rounded-2xl flex flex-col overflow-hidden backdrop-blur-3xl animate-in slide-in-from-right-4 border-l-2"
+              style={{ borderLeftColor: getSeverityColor(selectedZone.severity) }}
+            >
+              {/* Media Header / Image Slider */}
+              <div className="relative h-60 bg-slate-900 group">
+                {selectedZone.images && selectedZone.images.length > 0 ? (
+                  <>
+                    <img 
+                      src={selectedZone.images[activeImgIdx]} 
+                      alt="RSS Context" 
+                      className="w-full h-full object-cover transition-opacity duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent"></div>
+                    
+                    {selectedZone.images.length > 1 && (
+                      <>
+                        <button onClick={prevImg} className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/40 hover:bg-black/80 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                          <ChevronLeft size={16} />
+                        </button>
+                        <button onClick={nextImg} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-black/40 hover:bg-black/80 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                          <ChevronRight size={16} />
+                        </button>
+                        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex gap-1">
+                          {selectedZone.images.map((_, i) => (
+                            <div key={i} className="w-1 h-1 rounded-full" style={{ backgroundColor: i === activeImgIdx ? getSeverityColor(selectedZone.severity) : 'rgba(255,255,255,0.2)' }}></div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-white/[0.02]">
+                    <ImageIcon size={32} className="text-slate-800 mb-2" />
+                    <span className="text-[7px] font-black text-slate-700 uppercase italic">No media intel available</span>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent"></div>
+                  </div>
+                )}
+                
+                <button 
+                  onClick={() => setSelectedZone(null)} 
+                  className="absolute top-3 right-3 p-1.5 bg-black/60 hover:bg-red-900/40 border border-white/10 rounded-full text-white transition-all z-10"
+                >
+                  <X size={14} />
+                </button>
+
+                <div className="absolute bottom-4 left-5 right-5">
+                   <span className="text-[8px] font-black uppercase tracking-widest mb-1 block italic" style={{ color: getSeverityColor(selectedZone.severity) }}>Tọa độ mục tiêu</span>
+                   <h2 className="text-xl font-black text-white italic uppercase tracking-tighter leading-none">{selectedZone.country_vn}</h2>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white/[0.03] border border-white/5 p-3 rounded-xl">
+                    <p className="text-[7px] font-black text-slate-500 uppercase italic mb-1">Cấp độ</p>
+                    <p className="text-[10px] font-black uppercase italic tracking-widest" style={{ color: getSeverityColor(selectedZone.severity) }}>
+                      {selectedZone.severity}
+                    </p>
+                  </div>
+                  <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl">
+                    <p className="text-[7px] font-black text-slate-500 uppercase italic mb-1">Loại hình</p>
+                    <p className="text-[10px] font-black text-slate-300 uppercase italic tracking-widest">{selectedZone.type}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[8px] font-black text-slate-600 uppercase italic flex items-center gap-2"><Info size={10}/> Tóm lược Intel</h4>
+                    {selectedZone.sourceLink && (
+                      <a href={selectedZone.sourceLink} target="_blank" rel="noopener noreferrer" className="text-[7px] font-black text-blue-500 hover:text-blue-400 uppercase italic flex items-center gap-1">
+                        Nguồn RSS <ExternalLink size={8} />
+                      </a>
+                    )}
+                  </div>
+                  <p className="text-[12px] text-slate-300 italic leading-relaxed font-medium">{selectedZone.detail}</p>
+                </div>
+
+                <div className="p-4 rounded-xl border" style={{ backgroundColor: `${getSeverityColor(selectedZone.severity)}10`, borderColor: `${getSeverityColor(selectedZone.severity)}30` }}>
+                   <h4 className="text-[8px] font-black uppercase mb-2 italic" style={{ color: getSeverityColor(selectedZone.severity) }}>Cảnh báo tác chiến</h4>
+                   <p className="text-[10px] italic leading-snug text-slate-200">{selectedZone.advisory}</p>
+                </div>
+
+                {/* Local Field Chat */}
+                <div className="space-y-4 pt-2">
+                  <h4 className="text-[8px] font-black text-blue-500 uppercase italic border-b border-white/5 pb-2">Báo cáo thực địa</h4>
+                  <div className="space-y-3">
+                    {zoneComments.map((c, i) => (
+                      <div key={i} className="bg-white/[0.01] border border-white/[0.03] p-3 rounded-xl">
+                         <span className="text-[7px] font-black text-blue-900 uppercase italic mb-1 block">{c.userName}</span>
+                         <p className="text-[10px] text-slate-400 italic">{c.text}</p>
+                      </div>
+                    ))}
+                    {zoneComments.length === 0 && <p className="text-[8px] text-slate-700 italic text-center py-4">Chưa có báo cáo từ thực địa...</p>}
+                  </div>
+                  <form onSubmit={postZoneComment} className="relative mt-4">
+                    <input 
+                      type="text" 
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Nhập báo cáo..."
+                      className="w-full bg-white/[0.02] border border-white/10 rounded-xl px-4 py-2.5 text-[10px] italic text-slate-300 focus:outline-none focus:border-blue-500/50"
+                    />
+                    <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-blue-900 hover:bg-blue-800 text-white rounded-lg transition-colors">
+                      <Send size={12} />
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Global Intel Chat */
+            <div className="flex-1 bg-white/[0.02] border border-white/5 rounded-2xl flex flex-col overflow-hidden backdrop-blur-xl">
+              <div className="p-4 bg-white/[0.03] border-b border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Globe size={16} className="text-blue-500" />
+                  <span className="text-[10px] font-black uppercase text-white tracking-widest italic">Global Intel Chat</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
+                  <span className="text-[7px] font-bold text-slate-500">Online</span>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                {globalChat.map((msg, idx) => (
+                  <div key={idx} className="group">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[7px] font-black text-blue-400/70 uppercase italic tracking-tighter">{msg.userName}</span>
+                      <span className="text-[6px] text-slate-700 font-mono">
+                        {msg.timestamp ? new Date(msg.timestamp.toMillis()).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--:--'}
+                      </span>
+                    </div>
+                    <div className="bg-white/[0.03] border border-white/[0.05] p-3 rounded-2xl rounded-tl-none group-hover:border-blue-900/30 transition-all duration-300">
+                      <p className="text-[11px] text-slate-400 italic leading-relaxed">{msg.text}</p>
+                    </div>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+
+              <form onSubmit={postGlobalMsg} className="p-4 border-t border-white/5 bg-black/20">
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    value={newGlobalMsg}
+                    onChange={(e) => setNewGlobalMsg(e.target.value)}
+                    placeholder="Góp ý hoặc báo cáo quốc tế..."
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-4 pr-12 py-3 text-[10px] focus:outline-none focus:border-blue-900/50 italic text-slate-300 shadow-inner"
+                  />
+                  <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-blue-500 hover:text-blue-400 hover:scale-110 transition-all">
+                    <Zap size={18} fill="currentColor" className="opacity-80" />
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </aside>
+
+      </main>
+
+      <footer className="h-6 bg-black border-t border-white/5 px-6 flex items-center justify-between text-[7px] font-bold text-slate-800 uppercase italic tracking-[0.2em]">
+        <div className="flex gap-6">
+          <span className="text-slate-600 tracking-normal">SESSION_ID: {user?.uid.slice(-8)}</span>
+          <span className="flex items-center gap-1.5"><span className="w-1 h-1 bg-green-500 rounded-full animate-pulse"></span> CORE_SAT: CONNECTED</span>
+        </div>
+        <div className="flex gap-4">
+          <span>ENC_MODE: RSA-4096</span>
+          <span>© RSS INTELLIGENCE NETWORK 2026</span>
+        </div>
+      </footer>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.1); }
+      `}} />
+    </div>
+  );
+}
